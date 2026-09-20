@@ -23,13 +23,18 @@ CREATE TABLE IF NOT EXISTS viewed_homes (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id   INTEGER NOT NULL REFERENCES clients(id),
     viewed_date TEXT,
+    view_staus  TEXT,
     status      TEXT,
+    bedrooms    TEXT,
+    bathrooms   TEXT,
+    sqft        TEXT,
     price       TEXT,
     address     TEXT,
     city        TEXT,
     state       TEXT,
     zip         TEXT,
     mls_id      TEXT,
+    views       TEXT,
     url         TEXT,
     scraped_at  TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (client_id, url)
@@ -79,18 +84,19 @@ def home_exists(conn: sqlite3.Connection, client_id: int, home: Dict[str, Any]) 
     """
     if home.get("url"):
         row = conn.execute(
-            "SELECT 1 FROM viewed_homes WHERE client_id = ? AND url = ?",
-            (client_id, home["url"]),
+            "SELECT 1 FROM viewed_homes WHERE client_id = ? AND url = ? AND views = ?",
+            (client_id, home["url"], home["views"]),
         ).fetchone()
     else:
         row = conn.execute(
             "SELECT 1 FROM viewed_homes WHERE client_id = ? AND url IS NULL "
-            "AND address = ? AND zip = ? AND viewed_date = ?",
+            "AND address = ? AND zip = ? AND viewed_date = ? AND views = ?",
             (
                 client_id,
                 home.get("address", ""),
                 home.get("zip", ""),
                 home.get("date", ""),
+                home.get("views", ""),
             ),
         ).fetchone()
     return row is not None
@@ -100,19 +106,24 @@ def insert_viewed_home(
     conn: sqlite3.Connection, client_id: int, home: Dict[str, Any]
 ) -> None:
     conn.execute(
-        "INSERT INTO viewed_homes (client_id, viewed_date, status, price, "
-        "address, city, state, zip, mls_id, url) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO viewed_homes (client_id, viewed_date, view_staus, status, bedrooms,"
+        "bathrooms, sqft, price, address, city, state, zip, mls_id, views, url) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             client_id,
             home.get("date", ""),
+            home.get("view_status", ""),
             home.get("status", ""),
+            home.get("bedrooms", ""),
+            home.get("bathrooms", ""),
+            home.get("sqft", ""),
             home.get("price", ""),
             home.get("address", ""),
             home.get("city", ""),
             home.get("state", ""),
             home.get("zip", ""),
             home.get("mls_id", ""),
+            home.get("views", ""),
             home.get("url"),
         ),
     )
@@ -128,6 +139,7 @@ def store_client(
 
     Returns (is_new_client, homes_added, homes_skipped).
     """
+    
     is_new_client = upsert_client(conn, item)
 
     added = 0

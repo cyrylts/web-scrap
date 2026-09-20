@@ -49,6 +49,7 @@ _ADDRESS_RE = re.compile(
 _PRICE_RE = re.compile(r"^\$[\d,]+$")
 _SPECS_RE = re.compile(r"\b(bd|ba|sqft)\b")
 _VIEWS_RE = re.compile(r"^\d+ views?$")
+_VIEWS_NUM = re.compile(r"^\d{1,3}")
 
 
 # Poll condition: the modal has rendered at least one date-group header
@@ -135,44 +136,32 @@ def _parse_property_card(details: str) -> Dict[str, str]:
         127 Hillcrest Ave, Edison, NJ 08817 | MLS #2700662R | 23 views
     Missing pieces (status, mls_id, ...) are returned as empty strings.
     """
+
     lines = [line.strip() for line in details.split("\n") if line.strip()]
 
     result = {
+        "view_status": "",
         "status": "",
+        "bedrooms": "",
+        "bathrooms": "",
+        "sqft": "",
         "price": "",
         "address": "",
         "city": "",
         "state": "",
         "zip": "",
         "mls_id": "",
+        "views": "",
     }
     if not lines:
         return result
 
-    # lines[0] is the badge ("Viewed" / "Saved") — skipped.
-    idx = 1
+    idx = 0
 
-    # Optional status line ("Active", "Active - Atty Revu", ...): present
-    # only when the next line is not the price or the "···" separator.
-    if (
-        idx < len(lines)
-        and lines[idx] != "···"
-        and not _PRICE_RE.match(lines[idx])
-        and lines[idx] != "Price Unavailable"
-    ):
-        result["status"] = lines[idx]
-        idx += 1
-
-    # Skip the "···" separator(s) before the price line.
-    while idx < len(lines) and lines[idx] == "···":
-        idx += 1
-
-    if idx < len(lines):
-        result["price"] = lines[idx]
-        idx += 1
+    #For number of bathrooms, bedrooms and squere footage use _SPECS_RE value to find them, then string will have to be split by | to separate each value
 
     for line in lines[idx:]:
-        if line == "···" or _SPECS_RE.search(line) or _VIEWS_RE.match(line):
+        if line == "···" or _SPECS_RE.search(line):
             continue
         address_match = _ADDRESS_RE.match(line)
         if address_match:
@@ -180,9 +169,26 @@ def _parse_property_card(details: str) -> Dict[str, str]:
             result["city"] = address_match.group("city")
             result["state"] = address_match.group("state")
             result["zip"] = address_match.group("zip")
+            continue
+        price_match = _PRICE_RE.match(line)
+        if price_match:
+            result["price"] = line
+        elif line == "Price Unavailable":
+            result["price"] = line
+        elif line in ["Viewed", "Saved", "Shared", "Unsaved", "Property Inquiry", "Tour Request"]:
+            result["view_status"] = line
         elif line.startswith("MLS #"):
             result["mls_id"] = line.removeprefix("MLS #").strip()
+        elif line == "MLS ID Unavailable":
+            result["mls_id"] = line
         # "MLS ID Unavailable" -> mls_id stays ""
+        elif _VIEWS_RE.match(line):
+            views_num = _VIEWS_NUM.search(line)
+            result["views"] = views_num.group(0)
+        else:
+            if not _ADDRESS_RE.match(line):
+                result["status"] = line
+
 
     return result
 
